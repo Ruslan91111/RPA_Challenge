@@ -3,6 +3,8 @@ A script for synchronously filling out forms on https://rpachallenge.com/
  using a playwright and a panda.
  """
 import logging
+import os
+
 import pandas as pd
 from playwright.sync_api import sync_playwright
 
@@ -43,17 +45,20 @@ class RPASolver:
         """Скачать Excel файл в определенное место
         через нажатие кнопки на странице."""
         logger.info("Downloading excel file")
+        # Кликаем на кнопку скачать файл.
         with page.expect_download() as download_info:
             page.get_by_text(DOWNLOAD_EXCEL).click()
         download = download_info.value
+        # К пути, указанному пользователем добавляем название файла с сайта по умолчанию.
         absolute_path_to_excel = self.excel_path_from_user + download.suggested_filename
-        download.save_as(absolute_path_to_excel)  # TODO
+        download.save_as(absolute_path_to_excel)
         logger.info(f"Excel file {download.suggested_filename} "
                     f"downloaded in {self.excel_path_from_user}")
         return absolute_path_to_excel
 
     def fill_input_field(self, page, selector, value):
         """Заполнить определенное поле по переданному индикатору."""
+        # Ждем доступности поля и заполняем.
         page.wait_for_selector(selector)
         page.fill(selector, value)
         logger.info(f"Filling input field with selector: {selector} and value: {value}")
@@ -80,11 +85,13 @@ class RPASolver:
         with sync_playwright() as playwright:
             # Чтобы наглядно просмотреть работу браузера
             # в launch можно передать аргумент headless=False
-            browser = playwright.chromium.launch(headless=False)
+            browser = playwright.chromium.launch()
             page = browser.new_page(accept_downloads=True)
             page.goto(self.url)
             logger.info(f"Opening page {self.url}")
+            # Скачать Excel файл.
             self.absolute_path_to_excel = self.download_excel_file(page)
+            # Начать заполнение форм
             self.click_the_element(page, START)
             df = pd.read_excel(self.absolute_path_to_excel)
 
@@ -95,22 +102,31 @@ class RPASolver:
             browser.close()
 
 
+def validate_input(excel_path, screenshot_folder):
+    """Проверка введенных пользователем значений. """
+    if not os.path.isdir(excel_path):
+        raise ValueError("Invalid Excel file path.")
+    if not os.path.isdir(screenshot_folder):
+        raise ValueError("Invalid screenshot folder path.")
+
+
 def main():
     """Main function."""
-    excel_path_from_user = input("Введите полный путь до папки, в которой,"
-                                 " хотите сохранить файл Excel: ")
+    excel_path_from_user = input("Введите полный путь до папки, в которую"
+                                 " следует сохранить файл Excel: ")
     screenshot_path_from_user = input("Введите полный путь до папки, "
                                       "в которую следует сохранить скриншот: ")
     screenshot_path = screenshot_path_from_user + "screenshot.png"
 
     try:
+        validate_input(excel_path_from_user, screenshot_path_from_user)
         logger.info("Starting the RPA solver")
         solver = RPASolver(URL, excel_path_from_user, screenshot_path)
         solver.open_page_and_fill_the_forms()
-        logger.info("Исполнение кода успешно завершено.")
+        logger.info("Code execution completed successfully.")
 
     except Exception as e:
-        logger.error(f"Произошла ошибка: {str(e)}")
+        logger.error(f"An error occurred: {str(e)}")
 
 
 if __name__ == "__main__":
